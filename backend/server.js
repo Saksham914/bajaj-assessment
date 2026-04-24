@@ -1,173 +1,167 @@
-const express = require("express");
-const cors = require("cors");
+const express = require('express');
+const cors = require('cors');
 
 const app = express();
-
-// Enable CORS for frontend calling from different origins
 app.use(cors());
 app.use(express.json());
 
-app.post("/bfhl", (req, res) => {
-    let payload = req.body.data;
-    
-    // check if it's an array
-    if (!Array.isArray(payload)) {
-        return res.status(400).json({ error: "Send data as an array please" });
+app.post('/bfhl', (req, res) => {
+    const data = req.body.data;
+
+    if (!data || !Array.isArray(data)) {
+        return res.status(400).json({ error: "Invalid request body. 'data' must be an array." });
     }
 
-    const badInputs = [];
-    const repeatedEdges = [];
-    const parsedEdges = [];
-    
-    const uniqueCheck = new Set();
-    const dupTracker = new Set();
+    const invalid_entries = [];
+    const duplicate_edges = [];
+    const valid_edges = [];
+    const seen_edges = new Set();
+    const duplicate_set = new Set();
 
-    // process inputs
-    for (const val of payload) {
-        if (typeof val !== 'string') {
-            badInputs.push(val);
-            continue;
+    // 1 & 2. Validation & Duplicates
+    data.forEach(item => {
+        if (typeof item !== 'string') {
+            invalid_entries.push(item);
+            return;
         }
 
-        let str = val.trim();
-        
-        if (!/^[A-Z]->[A-Z]$/.test(str)) {
-            badInputs.push(val);
-            continue;
+        const trimmed = item.trim();
+
+        // Regex: Single Uppercase A-Z, exactly "->", Single Uppercase A-Z
+        const isValidFormat = /^[A-Z]->[A-Z]$/.test(trimmed);
+        if (!isValidFormat) {
+            invalid_entries.push(item);
+            return;
         }
 
-        let [p, c] = str.split('->');
-        
-        // self loops check
-        if (p === c) {
-            badInputs.push(val);
-            continue;
+        const [parent, child] = trimmed.split('->');
+
+        if (parent === child) {
+            invalid_entries.push(item);
+            return;
         }
 
-        if (uniqueCheck.has(str)) {
-            if (!dupTracker.has(str)) {
-                dupTracker.add(str);
-                repeatedEdges.push(str);
+        if (seen_edges.has(trimmed)) {
+            if (!duplicate_set.has(trimmed)) {
+                duplicate_set.add(trimmed);
+                duplicate_edges.push(trimmed);
             }
         } else {
-            uniqueCheck.add(str);
-            parsedEdges.push({ p, c, raw: str });
-        }
-    }
-
-    // build graph structures
-    const adjMap = {};
-    const parentRef = {};
-    const nodeSet = new Set();
-
-    for (let i = 0; i < parsedEdges.length; i++) {
-        let parentNode = parsedEdges[i].p;
-        let childNode = parsedEdges[i].c;
-
-        nodeSet.add(parentNode);
-        nodeSet.add(childNode);
-        
-        if (!adjMap[parentNode]) adjMap[parentNode] = [];
-        if (!adjMap[childNode]) adjMap[childNode] = [];
-
-        // only one parent allowed per rules
-        if (parentRef[childNode] !== undefined) {
-            continue; 
-        }
-
-        parentRef[childNode] = parentNode;
-        adjMap[parentNode].push(childNode);
-    }
-
-    const startNodes = [];
-    nodeSet.forEach(node => {
-        if (!parentRef[node]) {
-            startNodes.push(node);
+            seen_edges.add(trimmed);
+            valid_edges.push({ parent, child, original: trimmed });
         }
     });
 
-    const results = [];
-    let treeCount = 0;
-    let cycleCount = 0;
-    let maxD = 0;
-    let biggestRoot = "";
+    // 3. Graph Building
+    // Adjacency list
+    const adj = {};
+    const hasParent = {};
+    const nodes = new Set();
+
+    valid_edges.forEach(({ parent, child }) => {
+        nodes.add(parent);
+        nodes.add(child);
+
+        if (!adj[parent]) adj[parent] = [];
+        if (!adj[child]) adj[child] = [];
+
+        // If a node has multiple parents, only keep the first occurrence
+        if (hasParent[child] !== undefined) {
+            // Already has a parent, ignore this edge for the graph
+            return;
+        }
+
+        hasParent[child] = parent;
+        adj[parent].push(child);
+    });
+
+    // 4. Root Detection
+    // Roots = nodes that never appear as a child
+    const roots = [];
+    nodes.forEach(node => {
+        if (hasParent[node] === undefined) {
+            roots.push(node);
+        }
+    });
+
+    // 5, 6, 7. Tree Construction, Cycle Detection, Depth
+    const hierarchies = [];
+    let total_trees = 0;
+    let total_cycles = 0;
+    let max_depth = 0;
+    let largest_tree_root = "";
 
     const visited = new Set();
-    const pathStack = new Set(); 
+    const recursionStack = new Set();
 
-    // recursive DFS to build out the tree
-    function walkGraph(currNode, depthLevel) {
-        visited.add(currNode);
-        pathStack.add(currNode);
+    function buildTreeAndCheckCycle(node, currentDepth) {
+        visited.add(node);
+        recursionStack.add(node);
 
-        let subTree = {};
-        let isCyclic = false;
+        const tree = {};
+        let has_cycle = false;
         let maxChildDepth = 0;
 
-        let connections = adjMap[currNode] || [];
-        
-        connections.forEach(nxt => {
-            if (!visited.has(nxt)) {
-                let out = walkGraph(nxt, depthLevel + 1);
-                subTree[nxt] = out.treeObj;
-                if (out.cycleFlag) isCyclic = true;
-                if (out.d > maxChildDepth) maxChildDepth = out.d;
-            } else if (pathStack.has(nxt)) {
-                // we hit a loop!
-                // console.log("loop found at", nxt)
-                isCyclic = true;
+        for (const neighbor of (adj[node] || [])) {
+            if (!visited.has(neighbor)) {
+                const result = buildTreeAndCheckCycle(neighbor, currentDepth + 1);
+                tree[neighbor] = result.tree;
+                if (result.has_cycle) has_cycle = true;
+                maxChildDepth = Math.max(maxChildDepth, result.depth);
+            } else if (recursionStack.has(neighbor)) {
+                has_cycle = true;
             }
-        });
+        }
 
-        pathStack.delete(currNode);
-        
+        recursionStack.delete(node);
         return {
-            treeObj: subTree,
-            cycleFlag: isCyclic,
-            d: isCyclic ? 0 : 1 + maxChildDepth
+            tree,
+            has_cycle,
+            depth: has_cycle ? 0 : 1 + maxChildDepth
         };
     }
 
-    // go through the main roots
-    for (let i = 0; i < startNodes.length; i++) {
-        let r = startNodes[i];
-        let resData = walkGraph(r, 1);
-        
-        let struct = {
-            root: r,
-            tree: { [r]: resData.treeObj }
-        };
+    // Process roots
+    roots.forEach(root => {
+        const result = buildTreeAndCheckCycle(root, 1);
 
-        if (resData.cycleFlag) {
-            struct.has_cycle = true;
-            struct.tree = {};
-            cycleCount++;
+        const hierarchy = {
+            root: root,
+            tree: {}
+        };
+        hierarchy.tree[root] = result.tree;
+
+        if (result.has_cycle) {
+            hierarchy.has_cycle = true;
+            hierarchy.tree = {};
+            total_cycles++;
         } else {
-            struct.depth = resData.d;
-            treeCount++;
-            
-            // logic for max depth tiebreaker
-            if (resData.d > maxD) {
-                maxD = resData.d;
-                biggestRoot = r;
-            } else if (resData.d === maxD) {
-                if (biggestRoot === "" || r < biggestRoot) {
-                    biggestRoot = r;
+            hierarchy.depth = result.depth;
+            total_trees++;
+
+            // Check for largest tree root
+            if (result.depth > max_depth) {
+                max_depth = result.depth;
+                largest_tree_root = root;
+            } else if (result.depth === max_depth) {
+                if (largest_tree_root === "" || root < largest_tree_root) {
+                    largest_tree_root = root;
                 }
             }
         }
-        
-        results.push(struct);
-    }
 
-    // catch isolated cycles that had no root
-    nodeSet.forEach(nd => {
-        if (!visited.has(nd)) {
-            let resData = walkGraph(nd, 1);
-            if (resData.cycleFlag) {
-                cycleCount++;
-                results.push({
-                    root: nd,
+        hierarchies.push(hierarchy);
+    });
+
+    // Check for isolated cycles (nodes not reachable from any root)
+    nodes.forEach(node => {
+        if (!visited.has(node)) {
+            // Must be a cycle
+            const result = buildTreeAndCheckCycle(node, 1);
+            if (result.has_cycle) {
+                total_cycles++;
+                hierarchies.push({
+                    root: node,
                     tree: {},
                     has_cycle: true
                 });
@@ -175,22 +169,22 @@ app.post("/bfhl", (req, res) => {
         }
     });
 
-    res.status(200).json({
+    res.json({
         user_id: "saksham_shukla_24042026",
         email_id: "saksham.shukla@example.com",
         college_roll_number: "ROLL12345",
-        hierarchies: results,
-        invalid_entries: badInputs,
-        duplicate_edges: repeatedEdges,
+        hierarchies: hierarchies,
+        invalid_entries: invalid_entries,
+        duplicate_edges: duplicate_edges,
         summary: {
-            total_trees: treeCount,
-            total_cycles: cycleCount,
-            largest_tree_root: biggestRoot
+            total_trees: total_trees,
+            total_cycles: total_cycles,
+            largest_tree_root: largest_tree_root
         }
     });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Backend listening at port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
