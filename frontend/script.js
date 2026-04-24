@@ -16,7 +16,7 @@ window.onload = function() {
     let cDuplicates = document.getElementById('countDuplicates');
     let jOut = document.getElementById('jsonOutput');
 
-    let endpoint = 'http://localhost:3000/bfhl';
+    let endpoint = 'https://saksham-bajaj.onrender.com/bfhl';
 
     function displayError(str) {
         errMsg.innerText = str;
