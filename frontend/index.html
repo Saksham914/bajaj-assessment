@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bajaj Graph Analyzer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-wrapper">
+        <header class="app-header">
+            <div class="logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3s0 0 0 0z"></path></svg>
+                <h1>Graph Analyzer</h1>
+            </div>
+            <p class="subtitle">Assessment Submission</p>
+        </header>
+
+        <main class="main-content">
+            <!-- Input Card -->
+            <section class="card input-card">
+                <div class="card-header">
+                    <h2>Node Input</h2>
+                    <span class="help-text">e.g. A->B, B->C</span>
+                </div>
+                <div class="input-wrapper">
+                    <textarea id="nodeInput" placeholder='Enter nodes here (JSON array or line-by-line)...&#10;["A->B", "A->C", "B->D"]'></textarea>
+                </div>
+                <div class="actions">
+                    <button id="submitBtn" class="btn btn-primary">Analyze Graph</button>
+                    <button id="clearBtn" class="btn btn-secondary">Clear</button>
+                </div>
+                <div id="errorMsg" class="alert alert-error" style="display: none;"></div>
+            </section>
+
+            <!-- Results Section -->
+            <div id="resultsArea" style="display: none;">
+                <!-- Summary Metrics -->
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-label">Total Trees</div>
+                        <div class="metric-value" id="valTotalTrees">0</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Total Cycles</div>
+                        <div class="metric-value" id="valTotalCycles">0</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Largest Root</div>
+                        <div class="metric-value highlight" id="valLargestRoot">-</div>
+                    </div>
+                </div>
+
+                <div class="content-grid">
+                    <!-- Hierarchies Card -->
+                    <section class="card hierarchies-card">
+                        <h2>Hierarchies & Trees</h2>
+                        <div id="hierarchiesList" class="hierarchies-container">
+                            <!-- Trees injected here -->
+                        </div>
+                    </section>
+
+                    <!-- Issues Card -->
+                    <section class="card issues-card">
+                        <h2>Issues Found</h2>
+                        
+                        <div class="issue-section">
+                            <h3>Invalid Entries <span class="badge badge-error" id="countInvalids">0</span></h3>
+                            <ul id="listInvalids" class="issue-list"></ul>
+                        </div>
+                        
+                        <div class="issue-section">
+                            <h3>Duplicate Edges <span class="badge badge-warning" id="countDuplicates">0</span></h3>
+                            <ul id="listDuplicates" class="issue-list"></ul>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Raw JSON Accordion -->
+                <section class="card json-card">
+                    <details>
+                        <summary>View Raw JSON Response</summary>
+                        <pre id="jsonOutput"></pre>
+                    </details>
+                </section>
+            </div>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
